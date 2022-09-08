@@ -184,16 +184,94 @@ npx ts-node list_link.ts
 ```
 
 ### フォーム認証の処理をするコードを実装
-
 ```bash
 vi auth_form.ts
 ```
 ```typescript
+import playwright, { devices } from 'playwright';
 
+(async () => {
+	// Setup
+	const browser = await playwright.chromium.launch();
+	const context = await browser.newContext({ ...devices['Desktop Chrome'], locale: 'ja-JP' });
+	// https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/deviceDescriptorsSource.json
+	const page = await context.newPage();
+	await page.goto('https://github.com/login');
+
+	console.log(await page.title())
+	await page.locator('//*[@id="login_field"]').fill('user')
+	await page.locator('//*[@id="password"]').fill('pass')
+	await Promise.all([
+		page.locator('//*[@type="submit"]').click(),
+		//page.waitForNavigation(),
+		page.waitForTimeout(4000)
+	])
+	await page.screenshot({ path: `github.png` })
+	// login auth failure https://github.com/session
+	// login auth success https://github.com/
+	console.log(page.url())
+	// Save signed-in state to `githubStorageState.json`.
+	await page.context().storageState({ path: 'githubStorageState.json' })
+
+	// Teardown
+	await context.close();
+	await browser.close();
+})()
 ```
 #### コードの実行
 ```bash
 npx ts-node auth_form.ts
+```
+認証成功、github の場合は
+URL が https://github.com/ にページ遷移します。
+```
+Sign in to GitHub · GitHub
+https://github.com/
+```
+認証失敗、github の場合は
+URL が https://github.com/session にページ遷移します。
+```
+Sign in to GitHub · GitHub
+https://github.com/session
+```
+### フォーム認証の処理をするコードを実装 (認証成功時に作成した認証ファイルを利用して認証を実施する)
+ここでは、前項で認証成功時に、
+`await page.context().storageState({ path: 'githubStorageState.json' })`
+に指定したファイルを利用して認証必要ページにアクセスしています。
+```bash
+vi auth_form_success.ts
+```
+```typescript
+import playwright, { devices } from 'playwright';
+
+(async () => {
+	// Setup
+	const browser = await playwright.chromium.launch();
+	const context = await browser.newContext({ ...devices['Desktop Chrome'], locale: 'ja-JP', storageState: 'githubStorageState.json' });
+	// https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/deviceDescriptorsSource.json
+	const page = await context.newPage();
+	await Promise.all([
+		page.goto('https://github.com/'),
+		//page.waitForNavigation(),
+		page.waitForTimeout(4000)
+	])
+
+	console.log(await page.title())
+	console.log(page.url())
+	await page.screenshot({ path: `github_success.png` })
+
+	// Teardown
+	await context.close();
+	await browser.close();
+})()
+```
+#### コードの実行
+```bash
+npx ts-node auth_form_success.ts
+```
+```
+GitHub
+https://github.com/
 ```
 
 ### ベーシック認証の処理をするコードを実装
@@ -230,4 +308,14 @@ import playwright, { devices } from 'playwright';
 #### コードの実行
 ```bash
 npx ts-node auth_basic.ts
+```
+認証情成功、ステータスコードが`200`を返します。
+```
+200
+認証成功ページタイトル
+```
+認証失敗、ステータスコードが`401`を返します。
+```
+401
+認証失敗ページタイトル
 ```
